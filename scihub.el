@@ -247,7 +247,8 @@ and prompt for the captcha value. Returns the captcha value."
   (case method
     ('sync (aio-wait-for (apply f args)))
     ('async (aio-with-async (apply f args)))
-    ('promise (apply f args))))
+    ('promise (apply f args))
+    (otherwise (user-error "Invalid METHOD"))))
 
 ;;;###autoload
 (cl-defun scihub-get-from-url (url dest &optional (method 'sync))
