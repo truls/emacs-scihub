@@ -3,8 +3,9 @@
 (source gnu)
 (source melpa-stable)
 
-(depends-on "request-deferred")
 (depends-on "dash")
+(depends-on "aio-request" :git "https://github.com/truls/aio-request/")
 
 (development
- (depends-on "buttercup"))
+ (depends-on "buttercup")
+ (depends-on "undercover"))
