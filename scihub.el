@@ -49,6 +49,10 @@
   "List of scihub URLs to try. Set `scihub--lookup-url?' to `t'
   to attempt to locate the current scihub url dynamically")
 
+(defcustom scihub--captcha-retries
+  3
+  "The number of tries given to enter the correct captcha.")
+
 (defun scihub--buffer-to-dom ()
   ;; The coding hackery here is to work around an issue where
   ;; the buffer containing the downloaded content doesn't have
@@ -180,7 +184,7 @@ and prompt for the captcha value. Returns the captcha value."
     ;; Recursion seems not to be working inside aio-defun so we do
     ;; this instead
     (while (and (not downloaded)
-                (> 3 depth))
+                (> scihub--captcha-retries depth))
       (-if-let*
           ((response-
             (if captcha
