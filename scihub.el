@@ -269,17 +269,33 @@ METHOD should be one of the following:
 
 ;;;###autoload
 (cl-defun scihub-get-from-doi (doi dest &optional (method 'sync))
-  "Fetch article from DOI and save to DEST. Optionally fetch ASYnchronously"
+  "Fetch article from DOI and save to DEST using METHOD.
+
+'sync              Fetch synchronously. Don't return until
+                   fetch is complete. This is the default.
+'async             Fetch asynchronously. Function call
+                   returns immediately while the download
+                   continues in the background.
+'promise           Returns a promise for chaining with the aio library.
+"
   (interactive "sDOI of article to fetch: \nfSave to file: ")
   (scihub--call #'scihub--get-article-link method doi dest))
 
 ;;;###autoload
 (cl-defun scihub-get-from-full-scihub-url (url dest &optional (method 'sync))
-    "Downloads article specified by the URL. The URL given here
-    will be used unmodified and assumed to be pointing to
-    scihub. Save download to DEST"
-    (interactive "sFull sci-hub URL to fetch article from: \nfSave to file: ")
-    nil)
+  "Downloads article specified by the URL. The URL given here
+will be used unmodified and assumed to be pointing to
+scihub. Save download to DEST using METHOD.
+
+'sync              Fetch synchronously. Don't return until
+                   fetch is complete. This is the default.
+'async             Fetch asynchronously. Function call
+                   returns immediately while the download
+                   continues in the background.
+'promise           Returns a promise for chaining with the aio library.
+"
+  (interactive "sFull sci-hub URL to fetch article from: \nfSave to file: ")
+  (scihub--call $'scihub-get-article-link method url dest))
 
 (provide 'scihub)
 
