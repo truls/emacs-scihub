@@ -1,4 +1,8 @@
+emacs ?= emacs
+CASK ?= cask
+CASK_EXEC ?= ${CASK} exec
+
 test:
-	cask exec buttercup -L .
+	${CASK_EXEC} ${emacs} -Q -L "." -l test/run.el
 
 .PHONY: test

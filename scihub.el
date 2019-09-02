@@ -8,7 +8,7 @@
 ;; Keywords: convenience tools comm
 ;; Homepage: https://github.com/truls/emacs-scihub
 ;; Package-Version: 0.1
-;; Package-Requires: ((aio "1.0") (request "0.1.3") (emacs "24.3") (dash "2.16.0"))
+;; Package-Requires: ((aio "1.0") (request "0.1.3") (emacs "24.3") (dash "2.16.0") (s "1.12.0"))
 
 ;;; This file is not part of GNU Emacs.
 
@@ -28,13 +28,24 @@
 ;;; Commentary:
 ;; Provides an Emacs interface for downloading articles from
 ;; sci-hub. Supports prompting the user with a captcha.
+;;
+;; TODO:
+;; - Handle HTTP 500 error codes occasionally returned when fetching
+;; the actual PDF. Probably using retries
+;; - Ensure that missing articles are handled correctly
+;; - Validate function parameters. For example, check that given DOIs
+;; are valid.
+;; - Do sci-hub URL fallback in case the first one tried doesn't work
+;; - Get sci-hub URL from whereisscihub.now.sh
+;; - Handle captcha returned for entire page. This seems hard to reproduce.
 
 ;;; Code:
 
 (require 'aio-request)
 (require 'dom)
 (require 'dash)
-(require 'cl)
+(require 'cl-lib)
+(require 's)
 
 ;; TODO: Add support for getting url from whereisscihub.now.sh
 (defcustom scihub--lookup-url?
@@ -52,6 +63,13 @@
 (defcustom scihub--captcha-retries
   3
   "The number of tries given to enter the correct captcha.")
+
+(defvar scihub--debug
+  'error
+  "Debug output level. Set to 'error (default) 'info or 'debug. Use in a let-bind functions before calling.")
+
+(defun scihub--url (suffix)
+  (format "%s/%s" (car scihub--urls) suffix))
 
 (defun scihub--buffer-to-dom ()
   ;; The coding hackery here is to work around an issue where
@@ -84,8 +102,7 @@ and prompt for the captcha value. Returns the captcha value."
         (image-mode))
       (switch-to-buffer buf))
     (prog1
-        (read-from-minibuffer "Enter captcha text: ")
-      (kill-buffer buf))))
+        (read-from-minibuffer "Enter captcha text: "))))
 
 (aio-defun scihub--get-captcha-img (dom domain)
   (-if-let*
@@ -149,8 +166,8 @@ and prompt for the captcha value. Returns the captcha value."
 
 (aio-defun scihub--get-article-link-promise (url file)
   (-if-let* ((dom (request-response-data
-                  (aio-await (aio-request url
-                                          :parser #'scihub--buffer-to-dom))))
+                   (aio-await (aio-request url
+                                           :parser #'scihub--buffer-to-dom))))
              (res (scihub--try-get-pdf-url dom file)))
       (aio-await res)
     ;; Check if we got the global captcha
@@ -160,7 +177,7 @@ and prompt for the captcha value. Returns the captcha value."
         ((inputs (dom-by-tag dom 'input))
          (url (dom-attr (car (scihub--tags-by-attr-eq inputs 'name "url")) 'value))
          (captcha-id (dom-attr (car (scihub--tags-by-attr-eq inputs 'name "captchaId")) 'value))
-         (img (scihub--get-captcha-img dom "https://sci-hub.tw/"))
+         (img (scihub--get-captcha-img dom (scihub--url-domain-part url)))
          (answer (scihub--captcha-prompt "captcha"))
          (dom2 (request-response-data
                 (aio-await (aio-request "https://sci-hub.tw/solve"
@@ -171,11 +188,6 @@ and prompt for the captcha value. Returns the captcha value."
         (aio-await (scihub--try-get-pdf-url dom2 file))
       (error "Unable to get pdf url"))
     (error "Unable to get page")))
-
-(defun scihub--get-article-link (url file async)
-  (if async
-    (aio-with-async (scihub--get-article-link-promise url file)))
-  (aio-wait-for (scihub--get-article-link-promise url file)))
 
 (aio-defun scihub--get-pdf-link (url file)
   (let ((downloaded nil)
@@ -235,27 +247,17 @@ and prompt for the captcha value. Returns the captcha value."
           (error "Failed to download article")))
       (setq depth (+ depth 1)))))
 
-;; (let ((request-log-level 'debug)
-;;       (request-message-level 'debug))
-
-;(scihub--get-article-link "https://sci-hub.tw/10.1145/1190183.1190190" "~/download.pdf")
-;;(scihub--get-article-link "https://sci-hub.tw/https://link.springer.com/article/10.1007/s12599-017-0504-2" "~/download.pdf")
-
-;;(scihub--get-article-link "https://sci-hub.tw/https://ieeexplore.ieee.org/document/8746588" "~/download.pdf")
-
-  ;;(scihub--get-article-link "https://sci-hub.tw/https://www.sciencedirect.com/science/article/pii/S0927025609004558" "~/download.pdf")
-;;(scihub--get-article-link "https://sci-hub.tw/https://ieeexplore.ieee.org/document/7477491" "~/download.pdf")
-  ;; )
-
-(defun scihub--call (f method &rest args)
-  (case method
-    ('sync (aio-wait-for (apply f args)))
-    ('async (aio-with-async (apply f args)))
-    ('promise (apply f args))
-    (otherwise (user-error "Invalid METHOD"))))
+(defun scihub--call (method f &rest args)
+  (let ((request-log-level scihub--debug)
+        (request-message-level scihub--debug))
+    (cl-case method
+      ('sync (aio-wait-for (apply f args)))
+      ('async (aio-with-async (apply f args)))
+      ('promise (apply f args))
+      (otherwise (user-error "Invalid METHOD")))))
 
 ;;;###autoload
-(cl-defun scihub-get-from-url (url dest &optional (method 'sync))
+(cl-defun scihub-get-from-publisher-url (url dest &optional (method 'sync))
   "Download article from published URL and save to DEST using METHOD.
 
 METHOD should be one of the following:
@@ -269,7 +271,7 @@ METHOD should be one of the following:
 'promise           Returns a promise for chaining with the aio library.
 "
   (interactive "sPublisher URL to fetch using scihub: \nfSave to file: ")
-  (scihub--call #'scihub--get-article-link url det method))
+  (scihub--call method #'scihub--get-article-link-promise (scihub--url url) dest))
 
 ;;;###autoload
 (cl-defun scihub-get-from-doi (doi dest &optional (method 'sync))
@@ -283,10 +285,10 @@ METHOD should be one of the following:
 'promise           Returns a promise for chaining with the aio library.
 "
   (interactive "sDOI of article to fetch: \nfSave to file: ")
-  (scihub--call #'scihub--get-article-link method doi dest))
+  (scihub--call method #'scihub--get-article-link-promise (scihub--url doi) dest))
 
 ;;;###autoload
-(cl-defun scihub-get-from-full-scihub-url (url dest &optional (method 'sync))
+(cl-defun scihub-get-from-scihub-url (url dest &optional (method 'sync))
   "Downloads article specified by the URL. The URL given here
 will be used unmodified and assumed to be pointing to
 scihub. Save download to DEST using METHOD.
@@ -299,7 +301,7 @@ scihub. Save download to DEST using METHOD.
 'promise           Returns a promise for chaining with the aio library.
 "
   (interactive "sFull sci-hub URL to fetch article from: \nfSave to file: ")
-  (scihub--call $'scihub-get-article-link method url dest))
+  (scihub--call method #'scihub--get-article-link-promise url dest))
 
 (provide 'scihub)
 
