@@ -12,3 +12,23 @@ captchas from within Emacs.
 While basic functionality seems to be working, the code as a whole is
 still work-in-progress and is rather untested. Instructions for
 usage/integration will follow. Contributions and feedback welcome.
+
+## Installation
+Add `scihub.el` somewhere in your `load-path` using
+```elisp
+(add-to-list 'load-path "~/path/to/scihub.el")
+```
+
+Then load the package using either `use-package`
+```elisp
+(use-package scihub
+  :commands (scihub-get-from-publisher-url
+             scihub-get-from-doi
+             scihub-get-from-scihub-url))
+```
+
+**or** a plain `require`
+
+```elisp
+(require 'scihub)
+```
