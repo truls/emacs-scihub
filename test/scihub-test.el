@@ -4,7 +4,7 @@
                    :doi "10.1109/JSSC.2019.2923081"
                    :publisher-url "https://ieeexplore.ieee.org/document/8746588"
                    :scihub-url "https://sci-hub.tw/https://ieeexplore.ieee.org/document/8746588"
-                   :file "36b420fc35c96979894e8896cb48e12daa1a86c1")
+                   :file "dc1a7acb367a1b7df9a181d92ee0bac77ecfcffa")
                   (:name "Article 2"
                    :doi "10.1016/j.commatsci.2009.12.006"
                    :publisher-url "https://www.sciencedirect.com/science/article/pii/S0927025609004558"
